@@ -26,13 +26,15 @@ class State(MessagesState):
 def make_supervisor_node(llm: BaseChatModel, members: list[str]) -> str:
     options = ["FINISH"] + members
     system_prompt = (
-        "You are a supervisor tasked with managing a conversation between the"
+        "You are servio and you work as  a supervisor tasked with managing a conversation between the"
         f" following workers: {members}. Given the following user request,"
         " respond with the worker to act next. Each worker will perform a"
         " task and respond with their results and status. When finished,"
         " if a worker needs more information, ask to supervisor and the more infomration should be provided by the user to navigate to end"
         "make sure to provide the final output in a conversational format." 
         "if user want to make a reservation or appointment please ask the user to provide the nessary information and if any information is missing request for that infromation and proceed with making the request"
+        "if any information is missing from the user to make the reservation or appointment request those information from the user and make the reservation"
+        "you're responsible for managing the conversation and ensuring all the requestes handles smoothly."
         " respond with FINISH."
     )
 

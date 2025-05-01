@@ -162,3 +162,138 @@ def check_technician_availability(
     
     except Exception as e:
         return json.dumps({"error": f"Error checking technician availability: {str(e)}"})
+
+@tool
+def reserve_technician(
+    technician_id: str,
+    customer_name: str,
+    customer_email: str,
+    customer_contact: str,
+    customer_user_id: str,
+    vehicle_make: str,
+    vehicle_model: str,
+    vehicle_year: int,
+    service_type: str,
+    service_date: str,
+    service_time: str,
+    service_location: str,
+    problem_description: str,
+    additional_notes: Optional[str] = None
+) -> str:
+    """
+    Reserve a technician for a specific service appointment. Request for missing information if any required information is missing 
+    
+    Args:
+        technician_id: The MongoDB ID of the technician to reserve
+        customer_name: Full name of the customer
+        customer_email: Email address of the customer
+        customer_contact: Contact number of the customer
+        customer_user_id: User ID of the customer
+        vehicle_make: Make/brand of the vehicle
+        vehicle_model: Model of the vehicle
+        vehicle_year: Manufacturing year of the vehicle
+        service_type: Type of service requested
+        service_date: Date for the service in format 'YYYY-MM-DD'
+        service_time: Time for the service in 24-hour format 'HH:MM'
+        service_location: Location where the service will be performed
+        problem_description: Description of the problem or service needed
+        additional_notes: Any additional information or special requests
+        
+    Returns:
+        JSON string with reservation confirmation or error message
+    """
+    try:
+        db = get_db_connection()
+        technician_collection = db.technicians
+        reservations_collection = db.technicianreservations
+        
+        # Validate technician exists
+        technician = technician_collection.find_one({"_id": technician_id})
+        if not technician:
+            return json.dumps({
+                "success": False,
+                "error": f"Technician with ID {technician_id} not found."
+            })
+            
+        # Parse the date
+        try:
+            service_datetime = datetime.strptime(service_date, '%Y-%m-%d')
+        except ValueError:
+            return json.dumps({
+                "success": False,
+                "error": f"Invalid date format. Please use YYYY-MM-DD format (e.g., 2025-05-20)"
+            })
+            
+        # Check if technician is available at this time
+        availability_check = check_technician_availability(technician_id, service_date, service_time)
+        availability_result = json.loads(availability_check)
+        
+        if availability_result.get("error"):
+            return json.dumps({
+                "success": False,
+                "error": availability_result["error"]
+            })
+            
+        if availability_result.get("available") is False:
+            return json.dumps({
+                "success": False,
+                "error": f"Technician is not available on {service_date} at {service_time}. Please choose another date/time."
+            })
+        
+        # Create the reservation
+        technician_name = technician.get("name", "Unknown")
+        
+        reservation = {
+            "technician": technician_id,
+            "technicianName": technician_name,
+            "customer": {
+                "name": customer_name,
+                "email": customer_email,
+                "contactNumber": customer_contact,
+                "userId": customer_user_id
+            },
+            "vehicle": {
+                "make": vehicle_make,
+                "model": vehicle_model,
+                "year": vehicle_year
+            },
+            "service": {
+                "type": service_type,
+                "date": service_datetime,
+                "time": service_time,
+                "location": service_location,
+                "problemDescription": problem_description,
+                "additionalNotes": additional_notes or ""
+            },
+            "status": "Pending",
+            "createdAt": datetime.now(),
+            "updatedAt": datetime.now()
+        }
+        
+        # Insert reservation into database
+        result = reservations_collection.insert_one(reservation)
+        
+        if result.inserted_id:
+            return json.dumps({
+                "success": True,
+                "message": f"Reservation successfully created for {customer_name} with technician {technician_name}.",
+                "reservation_id": str(result.inserted_id),
+                "details": {
+                    "technician": technician_name,
+                    "date": service_date,
+                    "time": service_time,
+                    "service": service_type,
+                    "location": service_location
+                }
+            })
+        else:
+            return json.dumps({
+                "success": False,
+                "error": "Failed to create reservation. Database error."
+            })
+            
+    except Exception as e:
+        return json.dumps({
+            "success": False,
+            "error": f"Error creating reservation: {str(e)}"
+        })
